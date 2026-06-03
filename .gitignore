@@ -1,0 +1,29 @@
+# Claude-related content
+.claude/
+CLAUDE.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# User data
+uploads/*
+!uploads/.gitkeep
+data_store/*
+!data_store/.gitkeep
+
+# Flask
+instance/
