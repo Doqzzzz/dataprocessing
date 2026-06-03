@@ -7,216 +7,366 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>数据处理系统</h1>
-            <div class="header-actions">
-                {% if filename %}
-                <span class="badge">{{ filename }} ({{ row_count }}行 × {{ col_count }}列)</span>
-                <a href="{{ url_for('reset') }}" class="btn btn-sm btn-outline">清除数据</a>
-                {% endif %}
+    {% if not columns %}
+    <!-- ===== 上传页面 ===== -->
+    <div class="upload-page">
+        <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" class="upload-card">
+            <div class="upload-icon">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="12" y1="18" x2="12" y2="12"/>
+                    <polyline points="9 15 12 18 15 15"/>
+                </svg>
             </div>
-        </header>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="flash-container">
-            {% for category, message in messages %}
-            <div class="flash flash-{{ category }}">{{ message }}</div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
-
-        {% if not columns %}
-        <div class="upload-section">
-            <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" class="upload-card">
-                <div class="upload-icon">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="12" y1="18" x2="12" y2="12"/>
-                        <polyline points="9 15 12 18 15 15"/>
-                    </svg>
-                </div>
-                <h2>加载数据文件</h2>
-                <p>支持 CSV (.csv) 和 Excel (.xlsx, .xls) 格式</p>
-                <label class="upload-zone" id="upload-zone">
-                    <input type="file" name="file" id="file-input" accept=".csv,.xlsx,.xls" required>
-                    <span id="upload-text">点击选择文件或拖拽到此处</span>
-                </label>
-                <button type="submit" class="btn btn-primary" id="submit-btn">加载数据</button>
-            </form>
-        </div>
-        {% else %}
-
-        <div class="toolbar">
-            <div class="toolbar-group">
-                <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" class="inline-form">
-                    <label class="btn btn-sm btn-outline file-replace-label">
-                        替换文件
-                        <input type="file" name="file" accept=".csv,.xlsx,.xls" required onchange="this.form.submit()" hidden>
-                    </label>
-                </form>
-                <div class="dropdown">
-                    <button class="btn btn-sm btn-outline dropdown-toggle">导出数据 ▾</button>
-                    <div class="dropdown-menu">
-                        <a href="{{ url_for('export', format='csv') }}">导出为 CSV</a>
-                        <a href="{{ url_for('export', format='xlsx') }}">导出为 Excel</a>
-                    </div>
-                </div>
-                <button class="btn btn-sm btn-outline" onclick="toggleStats()">数据概况</button>
-            </div>
-        </div>
-
-        <div id="stats-panel" class="stats-panel" style="display:none;">
-            <h3>数据概况 <button class="close-btn" onclick="toggleStats()">✕</button></h3>
-            <div id="stats-content">加载中...</div>
-        </div>
-
-        <div class="process-panel">
-            <h3>列处理操作</h3>
-            <form action="{{ url_for('process_column') }}" method="post" class="process-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="column">目标列</label>
-                        <select name="column" id="column" required>
-                            <option value="">-- 选择列 --</option>
-                            {% for col in columns %}
-                            <option value="{{ col }}">{{ col }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="operation">操作</label>
-                        <select name="operation" id="operation" required>
-                            <optgroup label="缺失值">
-                                <option value="fillna">填充缺失值</option>
-                                <option value="dropna">删除缺失行</option>
-                            </optgroup>
-                            <optgroup label="数值变换">
-                                <option value="normalize">归一化 (0-1)</option>
-                                <option value="standardize">标准化 (Z-score)</option>
-                                <option value="round">四舍五入</option>
-                                <option value="clip">截断 (clip)</option>
-                                <option value="abs">绝对值</option>
-                                <option value="log">对数变换</option>
-                                <option value="add">加法</option>
-                                <option value="multiply">乘法</option>
-                            </optgroup>
-                            <optgroup label="类型转换">
-                                <option value="to_numeric">转为数值</option>
-                                <option value="to_int">转为整数</option>
-                                <option value="to_float">转为浮点数</option>
-                                <option value="to_string">转为字符串</option>
-                            </optgroup>
-                            <optgroup label="字符串">
-                                <option value="uppercase">转大写</option>
-                                <option value="lowercase">转小写</option>
-                                <option value="strip">去除首尾空格</option>
-                                <option value="replace">替换文本</option>
-                            </optgroup>
-                            <optgroup label="其他">
-                                <option value="duplicate">复制列</option>
-                                <option value="sort_asc">升序排列</option>
-                                <option value="sort_desc">降序排列</option>
-                                <option value="delete">删除列</option>
-                            </optgroup>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="param">参数</label>
-                        <input type="text" name="param" id="param" placeholder="可选">
-                        <span class="hint" id="param-hint"></span>
-                    </div>
-                    <div class="form-group form-group-btn">
-                        <label>&nbsp;</label>
-                        <button type="submit" class="btn btn-primary">执行</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-
-        <div class="data-table-wrapper">
-            <div class="table-info">
-                显示前 {{ rows|length }} 行，共 {{ row_count }} 行 {{ col_count }} 列
-                <span class="edit-hint">点击单元格可直接编辑</span>
-            </div>
-            <div class="table-scroll">
-                <table class="data-table" id="data-table">
-                    <thead>
-                        <tr>
-                            <th class="row-num">#</th>
-                            {% for col in columns %}
-                            <th>{{ col }}</th>
-                            {% endfor %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in rows %}
-                        {% set row_idx = loop.index0 %}
-                        <tr>
-                            <td class="row-num">{{ row_idx }}</td>
-                            {% for col in columns %}
-                            <td class="editable" data-row="{{ row_idx }}" data-column="{{ col }}"
-                                data-original="{{ row[col] | e }}">
-                                {{ row[col] }}
-                            </td>
-                            {% endfor %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        {% endif %}
+            <h2>加载数据文件</h2>
+            <p>支持 CSV &middot; Excel (.xlsx / .xls) 格式</p>
+            <label class="upload-zone" id="upload-zone">
+                <input type="file" name="file" id="file-input" accept=".csv,.xlsx,.xls" required>
+                <span id="upload-text">点击选择文件或拖拽到此处</span>
+            </label>
+            <button type="submit" class="btn btn-primary btn-lg">加载数据</button>
+        </form>
     </div>
+
+    {% else %}
+    <!-- ===== 工作台页面 ===== -->
+    <div class="workspace">
+
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>数据处理系统</h2>
+                <span class="badge">{{ filename }}</span>
+            </div>
+
+            <!-- 文件操作区 -->
+            <div class="sidebar-section">
+                <div class="section-title">文件</div>
+                <div class="section-body">
+                    <div class="file-stats">
+                        <div class="stat"><span class="stat-val">{{ row_count }}</span>行</div>
+                        <div class="stat"><span class="stat-val">{{ col_count }}</span>列</div>
+                    </div>
+                    <div class="btn-group">
+                        <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
+                            <label class="btn btn-block btn-outline file-replace-label">
+                                替换文件
+                                <input type="file" name="file" accept=".csv,.xlsx,.xls" required onchange="this.form.submit()" hidden>
+                            </label>
+                        </form>
+                        <div class="dropdown">
+                            <button class="btn btn-block btn-outline dropdown-toggle">导出数据 ▾</button>
+                            <div class="dropdown-menu">
+                                <a href="{{ url_for('export', format='csv') }}">CSV (.csv)</a>
+                                <a href="{{ url_for('export', format='xlsx') }}">Excel (.xlsx)</a>
+                            </div>
+                        </div>
+                        <a href="{{ url_for('reset') }}" class="btn btn-block btn-outline btn-danger">清除数据</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 列选择 -->
+            <div class="sidebar-section">
+                <div class="section-title">目标列</div>
+                <div class="section-body">
+                    <select id="target-column">
+                        <option value="">-- 选择列 --</option>
+                        {% for col in columns %}
+                        <option value="{{ col }}">{{ col }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- 缺失值处理 -->
+            <div class="sidebar-section">
+                <div class="section-title collapse-trigger" data-target="cat-missing">
+                    缺失值处理 <span class="toggle-arrow">▾</span>
+                </div>
+                <div class="section-body cat-body" id="cat-missing">
+                    <button class="op-btn" data-op="fillna" data-param="1" data-label="填充缺失值">填充缺失值</button>
+                    <button class="op-btn" data-op="dropna" data-label="删除含缺失的行">删除含缺失的行</button>
+                </div>
+            </div>
+
+            <!-- 数值计算 -->
+            <div class="sidebar-section">
+                <div class="section-title collapse-trigger" data-target="cat-numeric">
+                    数值计算 <span class="toggle-arrow">▾</span>
+                </div>
+                <div class="section-body cat-body" id="cat-numeric">
+                    <button class="op-btn" data-op="normalize" data-label="归一化">归一化 (0~1)</button>
+                    <button class="op-btn" data-op="standardize" data-label="标准化">标准化 (Z-score)</button>
+                    <button class="op-btn" data-op="round" data-param="1" data-label="四舍五入">四舍五入</button>
+                    <button class="op-btn" data-op="clip" data-param="1" data-label="截断范围">截断范围</button>
+                    <button class="op-btn" data-op="abs" data-label="绝对值">取绝对值</button>
+                    <button class="op-btn" data-op="log" data-label="对数变换">对数变换</button>
+                    <button class="op-btn" data-op="add" data-param="1" data-label="加法运算">加法运算</button>
+                    <button class="op-btn" data-op="multiply" data-param="1" data-label="乘法运算">乘法运算</button>
+                </div>
+            </div>
+
+            <!-- 类型转换 -->
+            <div class="sidebar-section">
+                <div class="section-title collapse-trigger" data-target="cat-type">
+                    类型转换 <span class="toggle-arrow">▾</span>
+                </div>
+                <div class="section-body cat-body" id="cat-type">
+                    <button class="op-btn" data-op="to_numeric" data-label="转为数值">转为数值</button>
+                    <button class="op-btn" data-op="to_int" data-label="转为整数">转为整数</button>
+                    <button class="op-btn" data-op="to_float" data-label="转为浮点数">转为浮点数</button>
+                    <button class="op-btn" data-op="to_string" data-label="转为字符串">转为字符串</button>
+                </div>
+            </div>
+
+            <!-- 文本处理 -->
+            <div class="sidebar-section">
+                <div class="section-title collapse-trigger" data-target="cat-text">
+                    文本处理 <span class="toggle-arrow">▾</span>
+                </div>
+                <div class="section-body cat-body" id="cat-text">
+                    <button class="op-btn" data-op="uppercase" data-label="转为大写">转大写</button>
+                    <button class="op-btn" data-op="lowercase" data-label="转为小写">转小写</button>
+                    <button class="op-btn" data-op="strip" data-label="去除首尾空格">去首尾空格</button>
+                    <button class="op-btn" data-op="replace" data-param="1" data-label="查找替换">查找替换</button>
+                </div>
+            </div>
+
+            <!-- 列管理 -->
+            <div class="sidebar-section">
+                <div class="section-title collapse-trigger" data-target="cat-colmanage">
+                    列管理 <span class="toggle-arrow">▾</span>
+                </div>
+                <div class="section-body cat-body" id="cat-colmanage">
+                    <button class="op-btn" data-op="duplicate" data-param="1" data-label="复制此列">复制此列</button>
+                    <button class="op-btn" data-op="sort_asc" data-label="按此列升序">按此列升序</button>
+                    <button class="op-btn" data-op="sort_desc" data-label="按此列降序">按此列降序</button>
+                    <button class="op-btn op-btn-danger" data-op="delete" data-label="删除此列">删除此列</button>
+                </div>
+            </div>
+
+            <!-- 参数弹窗 -->
+            <div id="param-overlay" style="display:none;">
+                <div id="param-dialog">
+                    <div id="param-title"></div>
+                    <input type="text" id="param-input" placeholder="输入参数...">
+                    <div class="param-actions">
+                        <button class="btn btn-outline" id="param-cancel">取消</button>
+                        <button class="btn btn-primary" id="param-confirm">执行</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 隐藏的执行表单 -->
+            <form action="{{ url_for('process_column') }}" method="post" id="process-form" style="display:none;">
+                <input type="hidden" name="column" id="hidden-column">
+                <input type="hidden" name="operation" id="hidden-operation">
+                <input type="hidden" name="param" id="hidden-param">
+            </form>
+
+            <!-- 数据概况区 -->
+            <div class="sidebar-section">
+                <div class="section-title" id="stats-toggle" style="cursor:pointer;">
+                    数据概况 <span class="toggle-arrow">▸</span>
+                </div>
+                <div class="section-body" id="stats-body" style="display:none;">
+                    <div id="stats-content" class="stats-content">点击加载</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <div class="data-table-wrapper">
+                <div class="table-header">
+                    <span>数据预览</span>
+                    <span class="table-header-hint">显示前 {{ rows|length }} 行 / 共 {{ row_count }} 行 · 双击单元格编辑</span>
+                </div>
+                <div class="table-scroll">
+                    <table class="data-table" id="data-table">
+                        <thead>
+                            <tr>
+                                <th class="col-idx">#</th>
+                                {% for col in columns %}
+                                <th title="{{ col }}">{{ col }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in rows %}
+                            {% set row_idx = loop.index0 %}
+                            <tr>
+                                <td class="col-idx">{{ row_idx }}</td>
+                                {% for col in columns %}
+                                <td class="editable" data-row="{{ row_idx }}" data-column="{{ col }}"
+                                    data-original="{{ row[col] | e }}">{{ row[col] }}</td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    {% endif %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-container">
+        {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
 
     <div id="toast" class="toast" style="display:none;"></div>
 
     <script>
-    const operationParamHints = {
-        'fillna': '填充值 (默认: 0)',
-        'normalize': '无需参数',
-        'standardize': '无需参数',
-        'round': '小数位数 (默认: 2)',
-        'clip': '下限,上限 (如: 0,100)',
-        'abs': '无需参数',
-        'log': '无需参数',
-        'add': '加数 (如: 10)',
-        'multiply': '乘数 (如: 2)',
-        'to_numeric': '无需参数',
-        'to_int': '无需参数',
-        'to_float': '无需参数',
-        'to_string': '无需参数',
-        'uppercase': '无需参数',
-        'lowercase': '无需参数',
-        'strip': '无需参数',
-        'replace': '旧值->新值 (如: old->new)',
-        'duplicate': '新列名 (默认: 原列名_copy)',
-        'sort_asc': '无需参数',
-        'sort_desc': '无需参数',
-        'delete': '无需参数',
-        'dropna': '无需参数'
+    // ===== 分类折叠 =====
+    document.querySelectorAll('.collapse-trigger').forEach(function(trigger) {
+        trigger.addEventListener('click', function() {
+            var target = document.getElementById(this.dataset.target);
+            var arrow = this.querySelector('.toggle-arrow');
+            if (target.style.display === 'none') {
+                target.style.display = 'block';
+                arrow.textContent = '▾';
+            } else {
+                target.style.display = 'none';
+                arrow.textContent = '▸';
+            }
+        });
+    });
+
+    // ===== 操作按钮 =====
+    var paramOverlay   = document.getElementById('param-overlay');
+    var paramDialog    = document.getElementById('param-dialog');
+    var paramTitle     = document.getElementById('param-title');
+    var paramInput     = document.getElementById('param-input');
+    var paramCancel    = document.getElementById('param-cancel');
+    var paramConfirm   = document.getElementById('param-confirm');
+    var hiddenColumn   = document.getElementById('hidden-column');
+    var hiddenOp       = document.getElementById('hidden-operation');
+    var hiddenParam    = document.getElementById('hidden-param');
+    var processForm    = document.getElementById('process-form');
+    var targetColumn   = document.getElementById('target-column');
+    var pendingOp      = null;
+
+    var paramLabels = {
+        'fillna': '填充值 (默认 0)',
+        'round': '保留小数位数 (默认 2)',
+        'clip': '下限,上限  如 0,100',
+        'add': '加多少  如 10',
+        'multiply': '乘多少  如 2',
+        'replace': '旧值->新值  如 a->b',
+        'duplicate': '新列名 (默认 列名_copy)'
     };
 
-    const opSelect = document.getElementById('operation');
-    if (opSelect) {
-        opSelect.addEventListener('change', function() {
-            const hint = document.getElementById('param-hint');
-            const paramInput = document.getElementById('param');
-            const op = this.value;
-            hint.textContent = operationParamHints[op] || '';
-            paramInput.style.display = operationParamHints[op] && operationParamHints[op] !== '无需参数' ? '' : '';
+    function getColumn() {
+        return targetColumn.value;
+    }
+
+    document.querySelectorAll('.op-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var col = getColumn();
+            if (!col) {
+                showToast('请先选择目标列', 'error');
+                return;
+            }
+            var op = this.dataset.op;
+            var label = this.dataset.label;
+            var needsParam = this.dataset.param === '1';
+
+            if (needsParam) {
+                pendingOp = op;
+                paramTitle.textContent = label;
+                paramInput.value = '';
+                paramInput.placeholder = paramLabels[op] || '输入参数...';
+                paramOverlay.style.display = 'flex';
+                setTimeout(function() { paramInput.focus(); }, 100);
+            } else {
+                executeOp(col, op, '');
+            }
+        });
+    });
+
+    paramCancel.addEventListener('click', function() {
+        paramOverlay.style.display = 'none';
+        pendingOp = null;
+    });
+    paramOverlay.addEventListener('click', function(e) {
+        if (e.target === paramOverlay) { paramCancel.click(); }
+    });
+    paramInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { paramConfirm.click(); }
+        if (e.key === 'Escape') { paramCancel.click(); }
+    });
+    paramConfirm.addEventListener('click', function() {
+        if (!pendingOp) return;
+        var col = getColumn();
+        if (!col) { paramCancel.click(); return; }
+        executeOp(col, pendingOp, paramInput.value);
+        paramOverlay.style.display = 'none';
+        pendingOp = null;
+    });
+
+    function executeOp(col, op, param) {
+        hiddenColumn.value = col;
+        hiddenOp.value = op;
+        hiddenParam.value = param;
+        processForm.submit();
+    }
+
+    // ===== 数据概况折叠 =====
+    var statsToggle  = document.getElementById('stats-toggle');
+    var statsBody    = document.getElementById('stats-body');
+    var statsContent = document.getElementById('stats-content');
+    var statsLoaded  = false;
+
+    if (statsToggle) {
+        statsToggle.addEventListener('click', function() {
+            var arrow = this.querySelector('.toggle-arrow');
+            if (statsBody.style.display === 'none') {
+                statsBody.style.display = 'block';
+                arrow.textContent = '▾';
+                if (!statsLoaded) { loadStats(); }
+            } else {
+                statsBody.style.display = 'none';
+                arrow.textContent = '▸';
+            }
         });
     }
 
-    // Cell editing
-    document.querySelectorAll('.editable').forEach(cell => {
+    async function loadStats() {
+        statsContent.textContent = '加载中...';
+        try {
+            var resp = await fetch('{{ url_for("stats") }}');
+            var data = await resp.json();
+            if (data.ok) {
+                var html = '<table class="stats-mini"><tbody>';
+                for (var i = 0; i < Object.keys(data.dtypes).length; i++) {
+                    var col = Object.keys(data.dtypes)[i];
+                    var dt = data.dtypes[col];
+                    var miss = data.missing[col];
+                    html += '<tr><td class="s-col">' + col + '</td><td class="s-type">' + dt + '</td><td class="s-miss">缺失 ' + miss + '</td></tr>';
+                }
+                html += '</tbody></table>';
+                statsContent.innerHTML = html;
+            } else { statsContent.textContent = '加载失败'; }
+        } catch(e) { statsContent.textContent = '加载失败'; }
+        statsLoaded = true;
+    }
+
+    // ===== 单元格编辑 =====
+    document.querySelectorAll('.editable').forEach(function(cell) {
         cell.addEventListener('dblclick', function() {
             if (this.querySelector('input')) return;
-            const original = this.dataset.original;
-            const input = document.createElement('input');
+            var self = this;
+            var original = this.dataset.original;
+            var input = document.createElement('input');
             input.type = 'text';
             input.value = original;
             input.className = 'cell-input';
@@ -225,121 +375,90 @@
             input.focus();
             input.select();
 
-            const save = async () => {
-                const newValue = input.value;
-                if (newValue === original) {
-                    this.textContent = original;
-                    return;
-                }
+            var save = async function() {
+                var newValue = input.value;
+                if (newValue === original) { self.textContent = original; return; }
                 try {
-                    const resp = await fetch('{{ url_for("edit_cell") }}', {
+                    var resp = await fetch('{{ url_for("edit_cell") }}', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
-                            row: parseInt(this.dataset.row),
-                            column: this.dataset.column,
+                            row: parseInt(self.dataset.row),
+                            column: self.dataset.column,
                             value: newValue
                         })
                     });
-                    const data = await resp.json();
+                    var data = await resp.json();
                     if (data.ok) {
-                        this.dataset.original = newValue;
-                        this.textContent = newValue;
-                        showToast('单元格已更新', 'success');
+                        self.dataset.original = newValue;
+                        self.textContent = newValue;
+                        showToast('已更新', 'success');
                     } else {
-                        this.textContent = original;
+                        self.textContent = original;
                         showToast(data.error || '更新失败', 'error');
                     }
-                } catch (e) {
-                    this.textContent = original;
-                    showToast('网络错误', 'error');
-                }
+                } catch(e) { self.textContent = original; showToast('网络错误', 'error'); }
             };
 
             input.addEventListener('blur', save);
             input.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') { e.preventDefault(); save(); }
-                if (e.key === 'Escape') {
-                    e.preventDefault();
-                    this.textContent = original;
-                }
-            }.bind(this));
+                if (e.key === 'Escape') { e.preventDefault(); self.textContent = original; }
+            });
         });
     });
 
-    async function toggleStats() {
-        const panel = document.getElementById('stats-panel');
-        if (panel.style.display === 'none') {
-            panel.style.display = 'block';
-            document.getElementById('stats-content').textContent = '加载中...';
-            try {
-                const resp = await fetch('{{ url_for("stats") }}');
-                const data = await resp.json();
-                if (data.ok) {
-                    let html = '<p><strong>数据维度:</strong> ' + data.shape[0] + ' 行 × ' + data.shape[1] + ' 列</p>';
-                    html += '<table class="stats-table"><thead><tr><th>列名</th><th>类型</th><th>缺失值</th></tr></thead><tbody>';
-                    for (const [col, dtype] of Object.entries(data.dtypes)) {
-                        html += `<tr><td>${col}</td><td>${dtype}</td><td>${data.missing[col]}</td></tr>`;
-                    }
-                    html += '</tbody></table>';
-                    document.getElementById('stats-content').innerHTML = html;
-                } else {
-                    document.getElementById('stats-content').textContent = '加载失败';
-                }
-            } catch (e) {
-                document.getElementById('stats-content').textContent = '加载失败';
-            }
-        } else {
-            panel.style.display = 'none';
-        }
-    }
-
+    // ===== Toast =====
     function showToast(msg, type) {
-        const toast = document.getElementById('toast');
+        var toast = document.getElementById('toast');
         toast.textContent = msg;
         toast.className = 'toast toast-' + type;
         toast.style.display = 'block';
         clearTimeout(toast._timer);
-        toast._timer = setTimeout(() => { toast.style.display = 'none'; }, 2500);
+        toast._timer = setTimeout(function() { toast.style.display = 'none'; }, 2500);
     }
 
-    // Dropdown toggle
-    document.querySelector('.dropdown-toggle')?.addEventListener('click', function(e) {
+    // ===== 自动消失 flash =====
+    setTimeout(function() {
+        var flashes = document.querySelectorAll('.flash');
+        flashes.forEach(function(f) { f.style.opacity = '0'; f.style.transition = 'opacity 0.3s'; });
+        setTimeout(function() { flashes.forEach(function(f) { f.remove(); }); }, 300);
+    }, 3000);
+
+    // ===== 下拉菜单 =====
+    document.querySelector('.dropdown-toggle') && document.querySelector('.dropdown-toggle').addEventListener('click', function(e) {
         e.stopPropagation();
         this.parentElement.classList.toggle('open');
     });
-    document.addEventListener('click', () => {
-        document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+    document.addEventListener('click', function() {
+        var dd = document.querySelector('.dropdown.open');
+        if (dd) dd.classList.remove('open');
     });
 
-    // Upload zone drag-and-drop + file name display
-    const uploadZone = document.getElementById('upload-zone');
-    const fileInput = document.getElementById('file-input');
-    const uploadText = document.getElementById('upload-text');
+    // ===== 上传区拖拽 =====
+    var uploadZone = document.getElementById('upload-zone');
+    var fileInput  = document.getElementById('file-input');
+    var uploadText = document.getElementById('upload-text');
 
     if (uploadZone && fileInput) {
         fileInput.addEventListener('click', function(e) { e.stopPropagation(); });
 
         uploadZone.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             uploadZone.classList.add('dragover');
         });
         uploadZone.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             uploadZone.classList.remove('dragover');
         });
         uploadZone.addEventListener('drop', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             uploadZone.classList.remove('dragover');
             if (e.dataTransfer.files.length) {
                 fileInput.files = e.dataTransfer.files;
                 fileInput.dispatchEvent(new Event('change', {bubbles: true}));
             }
         });
-
         fileInput.addEventListener('change', function() {
             if (fileInput.files && fileInput.files[0]) {
                 uploadText.textContent = fileInput.files[0].name;
