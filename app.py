@@ -38,16 +38,26 @@ def _save_dataframe(df, dataset_id=None):
 
 
 def _push_history(dataset_id):
-    """在 session 历史栈中保存当前状态，用于撤销"""
+    """保存当前数据快照到新 ID，加入历史栈"""
+    src = _get_dataset_path(dataset_id)
+    if not os.path.exists(src):
+        return
+    import shutil
+    snapshot_id = uuid.uuid4().hex
+    shutil.copy2(src, _get_dataset_path(snapshot_id))
     history = session.get('_undo_history', [])
-    history.append(dataset_id)
+    history.append(snapshot_id)
     if len(history) > 50:
-        history = history[-50:]
+        # 清理旧快照文件
+        old = history.pop(0)
+        old_path = _get_dataset_path(old)
+        if os.path.exists(old_path):
+            os.remove(old_path)
     session['_undo_history'] = history
 
 
 def _pop_history():
-    """从历史栈弹出最近的状态 ID，返回 None 表示无法撤销"""
+    """从历史栈弹出最近快照 ID"""
     history = session.get('_undo_history', [])
     if not history:
         return None
