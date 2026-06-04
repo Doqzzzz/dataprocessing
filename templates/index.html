@@ -62,6 +62,7 @@
                                 <a href="{{ url_for('export', format='xlsx') }}">Excel (.xlsx)</a>
                             </div>
                         </div>
+                        <button class="btn btn-block btn-outline" id="undo-btn" onclick="undoStep()" disabled>撤销上一步</button>
                         <a href="{{ url_for('reset') }}" class="btn btn-block btn-outline btn-danger">清除数据</a>
                     </div>
                 </div>
@@ -91,33 +92,14 @@
                 </div>
             </div>
 
-            <!-- 数值计算 -->
+            <!-- 数值变换 -->
             <div class="sidebar-section">
                 <div class="section-title collapse-trigger" data-target="cat-numeric">
-                    数值计算 <span class="toggle-arrow">▾</span>
+                    数值变换 <span class="toggle-arrow">▾</span>
                 </div>
                 <div class="section-body cat-body" id="cat-numeric">
                     <button class="op-btn" data-op="normalize" data-label="归一化">归一化 (0~1)</button>
                     <button class="op-btn" data-op="standardize" data-label="标准化">标准化 (Z-score)</button>
-                    <button class="op-btn" data-op="round" data-param="1" data-label="四舍五入">四舍五入</button>
-                    <button class="op-btn" data-op="clip" data-param="1" data-label="截断范围">截断范围</button>
-                    <button class="op-btn" data-op="abs" data-label="绝对值">取绝对值</button>
-                    <button class="op-btn" data-op="log" data-label="对数变换">对数变换</button>
-                    <button class="op-btn" data-op="add" data-param="1" data-label="加法运算">加法运算</button>
-                    <button class="op-btn" data-op="multiply" data-param="1" data-label="乘法运算">乘法运算</button>
-                </div>
-            </div>
-
-            <!-- 类型转换 -->
-            <div class="sidebar-section">
-                <div class="section-title collapse-trigger" data-target="cat-type">
-                    类型转换 <span class="toggle-arrow">▾</span>
-                </div>
-                <div class="section-body cat-body" id="cat-type">
-                    <button class="op-btn" data-op="to_numeric" data-label="转为数值">转为数值</button>
-                    <button class="op-btn" data-op="to_int" data-label="转为整数">转为整数</button>
-                    <button class="op-btn" data-op="to_float" data-label="转为浮点数">转为浮点数</button>
-                    <button class="op-btn" data-op="to_string" data-label="转为字符串">转为字符串</button>
                 </div>
             </div>
 
@@ -127,10 +109,7 @@
                     文本处理 <span class="toggle-arrow">▾</span>
                 </div>
                 <div class="section-body cat-body" id="cat-text">
-                    <button class="op-btn" data-op="uppercase" data-label="转为大写">转大写</button>
-                    <button class="op-btn" data-op="lowercase" data-label="转为小写">转小写</button>
-                    <button class="op-btn" data-op="strip" data-label="去除首尾空格">去首尾空格</button>
-                    <button class="op-btn" data-op="replace" data-param="1" data-label="查找替换">查找替换</button>
+                    <button class="op-btn" data-op="strip" data-label="去除首尾空格">去除首尾空格</button>
                 </div>
             </div>
 
@@ -241,83 +220,80 @@
         });
     });
 
-    // ===== 操作按钮 =====
+    // ===== 操作按钮 (仅工作台页面) =====
     var paramOverlay   = document.getElementById('param-overlay');
-    var paramDialog    = document.getElementById('param-dialog');
-    var paramTitle     = document.getElementById('param-title');
-    var paramInput     = document.getElementById('param-input');
-    var paramCancel    = document.getElementById('param-cancel');
-    var paramConfirm   = document.getElementById('param-confirm');
-    var hiddenColumn   = document.getElementById('hidden-column');
-    var hiddenOp       = document.getElementById('hidden-operation');
-    var hiddenParam    = document.getElementById('hidden-param');
-    var processForm    = document.getElementById('process-form');
-    var targetColumn   = document.getElementById('target-column');
-    var pendingOp      = null;
+    if (paramOverlay) {
+        var paramDialog    = document.getElementById('param-dialog');
+        var paramTitle     = document.getElementById('param-title');
+        var paramInput     = document.getElementById('param-input');
+        var paramCancel    = document.getElementById('param-cancel');
+        var paramConfirm   = document.getElementById('param-confirm');
+        var hiddenColumn   = document.getElementById('hidden-column');
+        var hiddenOp       = document.getElementById('hidden-operation');
+        var hiddenParam    = document.getElementById('hidden-param');
+        var processForm    = document.getElementById('process-form');
+        var targetColumn   = document.getElementById('target-column');
+        var pendingOp      = null;
 
-    var paramLabels = {
-        'fillna': '填充值 (默认 0)',
-        'round': '保留小数位数 (默认 2)',
-        'clip': '下限,上限  如 0,100',
-        'add': '加多少  如 10',
-        'multiply': '乘多少  如 2',
-        'replace': '旧值->新值  如 a->b',
-        'duplicate': '新列名 (默认 列名_copy)'
-    };
+        var paramLabels = {
+            'fillna': '填充值',
+            'duplicate': '新列名 (默认 列名_copy)'
+        };
 
-    function getColumn() {
-        return targetColumn.value;
-    }
+        function getColumn() {
+            return targetColumn.value;
+        }
 
-    document.querySelectorAll('.op-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var col = getColumn();
-            if (!col) {
-                showToast('请先选择目标列', 'error');
-                return;
-            }
-            var op = this.dataset.op;
-            var label = this.dataset.label;
-            var needsParam = this.dataset.param === '1';
+        document.querySelectorAll('.op-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var col = getColumn();
+                if (!col) {
+                    showToast('请先选择目标列', 'error');
+                    return;
+                }
+                var op = this.dataset.op;
+                var label = this.dataset.label;
+                var needsParam = this.dataset.param === '1';
 
-            if (needsParam) {
-                pendingOp = op;
-                paramTitle.textContent = label;
-                paramInput.value = '';
-                paramInput.placeholder = paramLabels[op] || '输入参数...';
-                paramOverlay.style.display = 'flex';
-                setTimeout(function() { paramInput.focus(); }, 100);
-            } else {
-                executeOp(col, op, '');
-            }
+                if (needsParam) {
+                    pendingOp = op;
+                    paramTitle.textContent = label;
+                    paramInput.value = '';
+                    paramInput.placeholder = paramLabels[op] || '输入参数...';
+                    paramOverlay.style.display = 'flex';
+                    setTimeout(function() { paramInput.focus(); }, 100);
+                } else {
+                    executeOp(col, op, '');
+                }
+            });
         });
-    });
 
-    paramCancel.addEventListener('click', function() {
-        paramOverlay.style.display = 'none';
-        pendingOp = null;
-    });
-    paramOverlay.addEventListener('click', function(e) {
-        if (e.target === paramOverlay) { paramCancel.click(); }
-    });
-    paramInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { paramConfirm.click(); }
-        if (e.key === 'Escape') { paramCancel.click(); }
-    });
-    paramConfirm.addEventListener('click', function() {
-        if (!pendingOp) return;
-        var col = getColumn();
-        if (!col) { paramCancel.click(); return; }
-        executeOp(col, pendingOp, paramInput.value);
-        paramOverlay.style.display = 'none';
-        pendingOp = null;
-    });
+        paramCancel.addEventListener('click', function() {
+            paramOverlay.style.display = 'none';
+            pendingOp = null;
+        });
+        paramOverlay.addEventListener('click', function(e) {
+            if (e.target === paramOverlay) { paramCancel.click(); }
+        });
+        paramInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { paramConfirm.click(); }
+            if (e.key === 'Escape') { paramCancel.click(); }
+        });
+        paramConfirm.addEventListener('click', function() {
+            if (!pendingOp) return;
+            var col = getColumn();
+            if (!col) { paramCancel.click(); return; }
+            executeOp(col, pendingOp, paramInput.value);
+            paramOverlay.style.display = 'none';
+            pendingOp = null;
+        });
 
-    function executeOp(col, op, param) {
-        hiddenColumn.value = col;
-        hiddenOp.value = op;
-        hiddenParam.value = param;
-        processForm.submit();
+        function executeOp(col, op, param) {
+            hiddenColumn.value = col;
+            hiddenOp.value = op;
+            hiddenParam.value = param;
+            processForm.submit();
+        }
     }
 
     // ===== 数据概况折叠 =====
@@ -417,6 +393,45 @@
         clearTimeout(toast._timer);
         toast._timer = setTimeout(function() { toast.style.display = 'none'; }, 2500);
     }
+
+    // ===== 撤销 =====
+    async function undoStep() {
+        var btn = document.getElementById('undo-btn');
+        btn.disabled = true;
+        btn.textContent = '撤销中...';
+        try {
+            var resp = await fetch('{{ url_for("undo") }}', {method: 'POST'});
+            var data = await resp.json();
+            if (data.ok) {
+                window.location.reload();
+            } else {
+                showToast(data.error || '撤销失败', 'error');
+                btn.disabled = false;
+                btn.textContent = '撤销上一步';
+                updateUndoCount();
+            }
+        } catch(e) {
+            showToast('网络错误', 'error');
+            btn.disabled = false;
+            btn.textContent = '撤销上一步';
+            updateUndoCount();
+        }
+    }
+
+    async function updateUndoCount() {
+        try {
+            var resp = await fetch('/undo-count');
+            var data = await resp.json();
+            var btn = document.getElementById('undo-btn');
+            if (btn) {
+                btn.disabled = data.count === 0;
+                btn.textContent = data.count > 0 ? '撤销上一步 (' + data.count + ')' : '撤销上一步';
+            }
+        } catch(e) {}
+    }
+
+    // 页面加载时检查
+    updateUndoCount();
 
     // ===== 自动消失 flash =====
     setTimeout(function() {

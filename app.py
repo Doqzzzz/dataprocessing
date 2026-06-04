@@ -37,6 +37,23 @@ def _save_dataframe(df, dataset_id=None):
     return dataset_id
 
 
+def _push_history(dataset_id):
+    """在 session 历史栈中保存当前状态，用于撤销"""
+    history = session.get('_undo_history', [])
+    history.append(dataset_id)
+    if len(history) > 50:
+        history = history[-50:]
+    session['_undo_history'] = history
+
+
+def _pop_history():
+    """从历史栈弹出最近的状态 ID，返回 None 表示无法撤销"""
+    history = session.get('_undo_history', [])
+    if not history:
+        return None
+    return history.pop()
+
+
 @app.route('/')
 def index():
     dataset_id = session.get('dataset_id')
@@ -59,6 +76,18 @@ def index():
                            col_count=len(columns))
 
 
+def _read_csv(file):
+    encodings = ['utf-8', 'gbk', 'gb2312', 'gb18030', 'latin-1', 'iso-8859-1']
+    for enc in encodings:
+        try:
+            file.seek(0)
+            return pd.read_csv(file, encoding=enc)
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    file.seek(0)
+    return pd.read_csv(file, encoding='utf-8', errors='replace')
+
+
 @app.route('/upload', methods=['POST'])
 def upload():
     file = request.files.get('file')
@@ -69,7 +98,7 @@ def upload():
     ext = os.path.splitext(file.filename)[1].lower()
     try:
         if ext == '.csv':
-            df = pd.read_csv(file)
+            df = _read_csv(file)
         elif ext in ('.xlsx', '.xls'):
             df = pd.read_excel(file)
         else:
@@ -86,6 +115,7 @@ def upload():
     dataset_id = _save_dataframe(df)
     session['dataset_id'] = dataset_id
     session['filename'] = file.filename
+    session['_undo_history'] = []
     flash(f'成功加载 {file.filename}，共 {len(df)} 行 {len(df.columns)} 列', 'success')
     return redirect(url_for('index'))
 
@@ -110,10 +140,11 @@ def process_column():
         flash('无效的列名', 'error')
         return redirect(url_for('index'))
 
+    _push_history(dataset_id)
     col_data = df[column]
     try:
         if operation == 'fillna':
-            df[column] = col_data.fillna(param if param else '0')
+            df[column] = col_data.fillna(param if param else '')
 
         elif operation == 'dropna':
             df = df[col_data.notna()].reset_index(drop=True)
@@ -134,57 +165,8 @@ def process_column():
             else:
                 flash('该列标准差为0，无法标准化', 'warning')
 
-        elif operation == 'to_numeric':
-            df[column] = pd.to_numeric(col_data, errors='coerce')
-
-        elif operation == 'to_string':
-            df[column] = col_data.astype(str)
-
-        elif operation == 'to_int':
-            df[column] = pd.to_numeric(col_data, errors='coerce').astype('Int64')
-
-        elif operation == 'to_float':
-            df[column] = pd.to_numeric(col_data, errors='coerce')
-
-        elif operation == 'uppercase':
-            df[column] = col_data.astype(str).str.upper()
-
-        elif operation == 'lowercase':
-            df[column] = col_data.astype(str).str.lower()
-
         elif operation == 'strip':
             df[column] = col_data.astype(str).str.strip()
-
-        elif operation == 'replace':
-            old_new = param.split('->', 1)
-            if len(old_new) == 2:
-                df[column] = col_data.replace(old_new[0].strip(), old_new[1].strip())
-            else:
-                flash('替换格式: 旧值->新值', 'error')
-                return redirect(url_for('index'))
-
-        elif operation == 'add':
-            df[column] = pd.to_numeric(col_data, errors='coerce') + float(param or 0)
-
-        elif operation == 'multiply':
-            df[column] = pd.to_numeric(col_data, errors='coerce') * float(param or 1)
-
-        elif operation == 'round':
-            df[column] = pd.to_numeric(col_data, errors='coerce').round(int(param or 2))
-
-        elif operation == 'clip':
-            parts = param.split(',')
-            lower = float(parts[0].strip()) if len(parts) > 0 and parts[0].strip() else None
-            upper = float(parts[1].strip()) if len(parts) > 1 and parts[1].strip() else None
-            numeric_col = pd.to_numeric(col_data, errors='coerce')
-            df[column] = numeric_col.clip(lower=lower, upper=upper)
-
-        elif operation == 'abs':
-            df[column] = pd.to_numeric(col_data, errors='coerce').abs()
-
-        elif operation == 'log':
-            numeric_col = pd.to_numeric(col_data, errors='coerce')
-            df[column] = numeric_col.apply(lambda x: None if pd.isna(x) or x <= 0 else __import__('math').log(x))
 
         elif operation == 'duplicate':
             new_name = param if param else f'{column}_copy'
@@ -236,6 +218,7 @@ def edit_cell():
     if row_idx < 0 or row_idx >= len(df):
         return jsonify({'ok': False, 'error': '无效的行索引'})
 
+    _push_history(dataset_id)
     df.at[row_idx, column] = new_value
     session['dataset_id'] = _save_dataframe(df, dataset_id)
     return jsonify({'ok': True, 'value': new_value})
@@ -274,10 +257,35 @@ def export():
                          as_attachment=True, download_name=output_name)
 
 
+@app.route('/undo', methods=['POST'])
+def undo():
+    dataset_id = session.get('dataset_id')
+    if not dataset_id:
+        return jsonify({'ok': False, 'error': '无数据'})
+
+    prev_id = _pop_history()
+    if prev_id is None:
+        return jsonify({'ok': False, 'error': '没有可回退的上一步'})
+
+    if not os.path.exists(_get_dataset_path(prev_id)):
+        return jsonify({'ok': False, 'error': '历史数据已过期'})
+
+    session['dataset_id'] = prev_id
+    session['_undo_history'] = session.get('_undo_history', [])
+    return jsonify({'ok': True})
+
+
+@app.route('/undo-count')
+def undo_count():
+    history = session.get('_undo_history', [])
+    return jsonify({'count': len(history)})
+
+
 @app.route('/reset')
 def reset():
     session.pop('dataset_id', None)
     session.pop('filename', None)
+    session.pop('_undo_history', None)
     flash('数据已清除', 'info')
     return redirect(url_for('index'))
 
